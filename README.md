@@ -87,7 +87,7 @@ import numpy as np
 
 # L1-regularized logistic regression. C=1.0 relaxes the penalty enough
 # for genes to enter the model (C=0.1 selected none, see the docs).
-model = LogisticRegression(penalty='l1', solver='liblinear', C=1.0, random_state=42)
+model = LogisticRegression(l1_ratio=1, solver='liblinear', C=1.0, max_iter=1000, random_state=42)
 
 # Leave-One-Out cross-validation
 loo = LeaveOneOut()
@@ -171,7 +171,9 @@ Because the headline number is fragile, follow-up checks were run on the model. 
 
 **Gene stability across folds.** Only one gene was selected in all 7 LOOCV folds. The 91-gene list from the full-data fit is therefore not a stable signature. Most of it changes from fold to fold.
 
-**Exact permutation test.** With 7 samples there are only 35 ways to assign 4 samples to the fibrosis group, so every labeling was tested with the full LOOCV pipeline. Only the real labeling reached 100%, giving an exact p of 1/35 ≈ 0.029, the smallest value this sample size allows. This argues against the 100% being a chance effect of having far more genes than samples. It does not rule out a batch effect, and it says nothing about new samples.
+**Exact permutation test.** With 7 samples there are only 35 ways to assign 4 samples to the fibrosis group, so every labeling was tested with the full LOOCV pipeline. With `random_state=42`, 2 of the 35 labelings (the real one and one scrambled one) reached 100%, giving an exact p of 2/35 ≈ 0.057. An earlier run without a seed gave 1/35 ≈ 0.029, so the result moves by one labeling with the solver's random seed. At this sample size 1/35 is the smallest possible p-value, so the test sits right at the 0.05 line. It therefore does not clearly rule out that the 100% is a chance effect of having far more genes than samples. It also does not rule out a batch effect, and it says nothing about new samples.
+
+**Stability selection.** To see how consistently genes are chosen when the data change, the model was refit on all 21 five-sample subsets at three values of `C` (0.5, 1.0, 2.0), 63 fits in total. `ENSMUSG00000030255` was selected in 87% of fits (55 of 63). The next most frequent genes, `ENSMUSG00000027510` and `ENSMUSG00000028885`, were selected in 37% and 35%, and every other gene was at or below 22%. SMOC2 was selected in 1.6% of fits (1 of 63). This is descriptive only: the subsets overlap heavily, and the formal error guarantees of stability selection need far more than 7 samples. The result agrees with the fold-stability check: one gene is robust and the rest of the 91-gene list is not.
 
 **Behavior of the top gene.** `ENSMUSG00000030255` (Sspn, sarcospan, a muscle membrane-adhesion gene) separates the groups with no overlap (values are log2 CPM + 1):
 
@@ -188,14 +190,15 @@ The gap of about 1.7 log2 units corresponds to roughly a 3-fold difference, and 
 
 - **Sample size.** Seven samples (4 vs 3) cannot support a reliable classifier. LOOCV accuracy can only take eight values, and one sample changes it by 14 points.
 - **Chance separation.** Under no real association, a single gene still splits a 3 vs 4 grouping perfectly with probability 2/35 (about 6%). Across roughly 29,500 genes, well over a thousand genes would be expected to do so by chance alone. A perfect split is not, on its own, evidence of a real effect.
-- **Selection instability.** L1 chooses somewhat arbitrarily among many genes that separate the classes, which is why only one gene survives every fold.
+- **Selection instability.** L1 chooses somewhat arbitrarily among many genes that separate the classes. Only one gene survives every LOOCV fold, and in stability selection only one gene is selected in more than 40% of subset fits.
+- **Solver randomness.** The `liblinear` L1 solver uses a random coordinate order. With 7 samples, a figure such as the permutation share can shift by a whole labeling between seeds, so seeded values should be read as one draw, not an exact constant.
 - **No independent test.** The model has never been evaluated on data it was not built from, so the LOOCV figure should not be quoted as expected real-world accuracy.
 - **Tuning on the evaluation data.** Choosing `C` using the same 7 samples that are used for LOOCV is optimistic. There are too few samples for nested cross-validation.
 
 ## Next Steps
 
 1. Run differential expression on the raw counts with DESeq2, edgeR, or `pydeseq2`. These methods model count data properly and give adjusted p-values. Check whether `ENSMUSG00000030255` also ranks near the top there.
-2. Follow up on the top gene, Sspn (sarcospan): check what is known about it in kidney tissue and fibrosis, and whether it also ranks highly in differential expression.
+2. Follow up on the top gene, Sspn (sarcospan), and on SMOC2: check what is known about them in kidney tissue and fibrosis, whether they rank highly in differential expression, and, if they hold up, validate by qPCR on independent animals.
 3. Try pre-filtering to the most variable genes, or an elastic net penalty, which handles correlated genes better than pure L1.
 4. Look for an external fibrosis dataset to use as a real held-out test.
 
@@ -209,9 +212,9 @@ The gap of about 1.7 log2 units corresponds to roughly a 3-fold difference, and 
 ## Project Structure
 
 ```text
-Fibrosis/
+SMOC2-Transcriptome-Classifier/
 ├── Data/
-│   └── fibrosis_smoc2_raw_counts.csv
+│   └── fibrosis_smoc2_rawcounts.csv
 ├── docs/
 │   └── model_tuning_and_validation.md
 ├── images/
