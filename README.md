@@ -1,4 +1,4 @@
-# SMOC-Transcriptome-Classifier
+# SMOC2-Transcriptome-Classifier
 
 ## Project Overview
 
