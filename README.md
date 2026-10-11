@@ -37,11 +37,11 @@ With 29,556 features and 7 samples, individual scatter plots are not practical. 
 
 **SMOC2 expression:**
 
-![SMOC2 Expression Level](images/SMOC2%20Expression%20Level.png)
+![SMOC2 Expression Level](<images/SMOC2 Expression Level.png>)
 
 **PCA clustering:**
 
-![PCA of Fibrosis vs Normal Tissue Samples](images/Fibrosis%20vs%20Normal%20tissue.png)
+![PCA of Fibrosis vs Normal Tissue Samples](<images/Fibrosis vs Normal tissue.png>)
 
 ## Machine Learning Approach
 
