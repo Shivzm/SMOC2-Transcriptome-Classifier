@@ -167,7 +167,7 @@ A cross-validation accuracy of 100% looks impressive, but with 7 samples it is m
 
 ## Validation Checks
 
-Because the headline number is fragile, follow-up checks were run on the model. The code for each is in [docs/model_tuning_and_validation.md](docs/model_tuning_and_validation.md).
+Because the headline number is fragile, follow-up checks were run on the model. The code for each is in [docs/model_tuning_and_validation.md](Docs/model_tuning_and_validation.md).
 
 **Gene stability across folds.** Only one gene was selected in all 7 LOOCV folds. The 91-gene list from the full-data fit is therefore not a stable signature. Most of it changes from fold to fold.
 
