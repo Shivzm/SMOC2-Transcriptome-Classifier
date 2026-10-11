@@ -261,34 +261,57 @@ Two limits remain. An exact p-value of 1/35 ≈ 0.029 is the smallest this sampl
 
 ### 7.3 Biological sanity check: the top gene and SMOC2
 
+SMOC2 is reported to be among the most upregulated genes in mouse kidney fibrosis, so it works as a positive control for the data and labels. This cell checks it directly and compares it with the model's top gene.
+
 ```python
-# Where does SMOC2 fall in the full-data signature?
-smoc2_id = 'ENSMUSG00000024037'
+# SMOC2 check (mouse Smoc2 Ensembl ID)
+smoc2_id = 'ENSMUSG00000023886'
+top_gene = signature_df.iloc[0]['Gene_Ensembl_ID']
+
+print("SMOC2 in matrix:", smoc2_id in df_ml.columns)
+print("SMOC2 in selected signature:", smoc2_id in set(signature_df['Gene_Ensembl_ID']))
 print(signature_df[signature_df['Gene_Ensembl_ID'] == smoc2_id])
 
-# Expression of the top gene by condition
-top_gene = signature_df.iloc[0]['Gene_Ensembl_ID']
-print(top_gene)
+print("\nSMOC2 log2(CPM+1) by condition:")
+print(df_ml[smoc2_id].groupby(y).describe())
+print("log2FC (fibrosis - normal):", df_ml.loc[y == 1, smoc2_id].mean() - df_ml.loc[y == 0, smoc2_id].mean())
+print("Correlation of SMOC2 with top gene:", np.corrcoef(df_ml[smoc2_id], df_ml[top_gene])[0, 1])
+
+print("\nTop gene:", top_gene)
 print(df_ml[top_gene].groupby(y).describe())
 ```
 
 Output:
 
 ```text
+SMOC2 in matrix: True
+SMOC2 in selected signature: False
 Empty DataFrame
 Columns: [Gene_Ensembl_ID, Model_Weight]
 Index: []
-ENSMUSG00000030255
+
+SMOC2 log2(CPM+1) by condition:
+   count      mean       std       min       25%       50%       75%       max
+0    3.0  4.113374  0.749717  3.248205  3.883982  4.519759  4.545959  4.572158
+1    4.0  6.781576  0.263862  6.615447  6.641346  6.667923  6.808153  7.175013
+log2FC (fibrosis - normal): 2.6682022831194185
+Correlation of SMOC2 with top gene: 0.9747117656115839
+
+Top gene: ENSMUSG00000030255
    count      mean       std       min       25%       50%       75%       max
 0    3.0  2.047019  0.322258  1.682037  1.924383  2.166730  2.229510  2.292291
 1    4.0  3.738266  0.181153  3.496952  3.664357  3.766141  3.840049  3.923828
 ```
 
-Two observations.
+An earlier draft of this check used `ENSMUSG00000024037`, which is not the mouse SMOC2 ID, so it was checking the wrong gene. The output above uses the correct ID, `ENSMUSG00000023886`.
 
 **The top gene separates the groups cleanly.** Group 0 (Normal) ranges from 1.68 to 2.29 and group 1 (Fibrosis) from 3.50 to 3.92, so the ranges do not overlap. The mean difference is about 1.69 log2 units, roughly a 3.2-fold change, and the spread within each group is small. A rough two-sample t-test on these summary values gives t of about 9 and p of about 0.0003 before any correction. That is a strong effect, but not enough alone: across 29,556 genes, about nine genes would be expected to reach p = 0.0003 by chance, so the number needs a proper multiple-testing correction.
 
-**SMOC2 was not selected.** The empty table means SMOC2 (`ENSMUSG00000024037`) is not among the 91 genes. This could mean that the ID is not in the filtered matrix, or that L1 dropped it in favor of the top gene. L1 keeps one member of a correlated group and zeroes the rest, so its absence does not show that SMOC2 is unchanged. The SMOC2 boxplot from the EDA section is the right place to judge its behavior, and the membership of the ID in `df_ml.columns` is worth confirming.
+**The top gene is Sspn (sarcospan).** `ENSMUSG00000030255` maps to the protein-coding gene Sspn (MGI:1353511) on mouse chromosome 6. Sarcospan is a component of the dystrophin-glycoprotein complex, expressed in skeletal and cardiac muscle, where it helps link the cell membrane to the extracellular matrix. In published mouse work, loss of Sspn increases heart fibrosis after beta-adrenergic stress, which suggests a protective role. Here Sspn is higher in fibrosis, so the direction is not what a protective role would predict. Possible explanations include a compensatory response, differences in cell composition between the samples (for example more smooth-muscle-like or myofibroblast-like cells), a batch effect, or chance with n = 7. None of these is tested here, and no source found so far links Sspn to kidney fibrosis, so Sspn is a lead to verify and not an established marker.
+
+**SMOC2 behaves as expected.** SMOC2 is in the matrix and is clearly higher in fibrosis: mean 4.11 in Normal against 6.78 in Fibrosis, a log2 fold change of 2.67 (about 6.4-fold). The ranges do not overlap (Normal 3.25 to 4.57, Fibrosis 6.62 to 7.18). The fold change is smaller than the 10 to 60-fold increases quoted in the dataset description, but those figures come from different mouse models and measurements, so the comparison is loose. What matters is that the direction is right and the groups separate cleanly, which supports the labels and the preprocessing.
+
+**Why SMOC2 was not selected.** SMOC2 separates the groups as well as Sspn, and the two are highly correlated across the 7 samples (r = 0.975). L1 keeps one member of a correlated group and sets the others to zero, and with Sspn slightly tighter within groups (smaller spread, no outlier) it was kept. Not being selected therefore says nothing against SMOC2. One caution: with only 7 samples, any two genes that both separate the groups will correlate strongly, because the group difference drives the correlation. The r of 0.975 does not show that the two genes are co-regulated, and within-group correlation cannot be assessed with 3 and 4 samples.
 
 ## 8. Conclusions
 
@@ -297,17 +320,18 @@ What the evidence supports:
 - The first model failed for a mathematical reason, not a biological one: with 7 samples and standardized features, `C = 0.1` is too strict for any gene to enter the model, and the 42.9% was the share of Normal samples.
 - At `C = 1.0` the model finds one gene, `ENSMUSG00000030255`, that is selected in every fold and separates the two groups with no overlap.
 - The exact permutation test over all 35 labelings gives p ≈ 0.029 (1/35): only the real labeling reaches 100% LOOCV accuracy.
+- SMOC2, a gene reported to be strongly upregulated in mouse kidney fibrosis, is about 6.4-fold higher in the fibrosis samples with no overlap between groups, which supports the labels and preprocessing.
 - The remaining 90 genes in the 91-gene signature are unstable and should not be interpreted.
 
 What the evidence does not support:
 
 - That the classifier would reach 100% accuracy on new samples. It has not been tested on any.
-- That the top gene is a validated biomarker. Its significance has not yet been checked against a proper differential expression analysis with multiple-testing correction, and its identity and biological role have not been looked up.
-- Anything about SMOC2 from the model. It was not selected, and that alone is uninformative.
+- That the top gene is a validated biomarker. It is Sspn (sarcospan), a muscle membrane-adhesion gene with no established link to kidney fibrosis found so far. Its significance has not yet been checked against a proper differential expression analysis with multiple-testing correction.
+- That SMOC2 and Sspn are co-regulated. Their high correlation (r = 0.975) is expected for any two genes that both separate the groups in 7 samples.
 
 ## 9. Next steps
 
 1. **Differential expression on raw counts** with DESeq2, edgeR, or `pydeseq2`, which model count data and give adjusted p-values. Check where `ENSMUSG00000030255` ranks and whether its adjusted p-value and log2 fold change hold up.
-2. **Identify the top gene** on Ensembl or MGI and see whether it has a known link to fibrosis. This matters for how the result is described: an established fibrosis-related gene is a much stronger finding than an uncharacterized one.
+2. **Follow up on Sspn.** The top gene is identified (sarcospan), so the next step is to check what is known about it in kidney tissue and fibrosis, and whether it also ranks highly in a differential expression analysis. Treat it as a lead until then.
 3. **Reduce the feature space** before modeling, either by keeping the most variable genes or genes that pass a differential expression filter, or try an elastic net penalty (`penalty='elasticnet'`, `solver='saga'`), which copes better with correlated genes than pure L1.
 4. **Find an external dataset** with a comparable fibrosis versus normal design to use as a held-out test. This is the only way to estimate how the model would perform on new samples.
