@@ -35,7 +35,7 @@ import pandas as pd
 import numpy as np
 
 # A small C value (like 0.1) forces strong regularization to select fewer genes.
-model = LogisticRegression(penalty='l1', solver='liblinear', C=0.1, random_state=42)
+model = LogisticRegression(l1_ratio=1, solver='liblinear', C=1.0, random_state=42)
 
 loo = LeaveOneOut()
 y_true, y_pred = [], []
@@ -137,7 +137,7 @@ The dataset has 3 Normal samples, so predicting Normal each time is correct 3 ti
 With the cause understood, the fix was to relax the penalty. At `C = 1.0` the threshold is `1 / C = 1`, comfortably below the ceiling of 3.5, so genes can enter the model. The code is identical to Experiment 1 except for one line:
 
 ```python
-model = LogisticRegression(penalty='l1', solver='liblinear', C=1.0, random_state=42)
+model = LogisticRegression(l1_ratio=1, solver='liblinear', C=1.0, random_state=42)
 ```
 
 Output (the middle of the list is truncated here exactly as it was in the notebook):
@@ -198,7 +198,7 @@ The following checks were run to find out how much of the result holds up.
 If the signature is real, the same genes should be chosen whichever sample is left out. This check keeps the genes that were selected in every fold.
 
 ```python
-model = LogisticRegression(penalty='l1', solver='liblinear', C=1.0, max_iter=1000, random_state=42)
+model = LogisticRegression(l1_ratio=1, solver='liblinear', C=1.0, max_iter=1000, random_state=42)
 
 picked = []
 for tr, te in LeaveOneOut().split(df_ml):
@@ -227,7 +227,7 @@ With 7 samples there are only 35 ways to assign 4 samples to the fibrosis group,
 from itertools import combinations
 
 n, k = len(y), int(y.sum())
-model = LogisticRegression(penalty='l1', solver='liblinear', C=1.0, max_iter=1000)
+model = LogisticRegression(l1_ratio=1, solver='liblinear', C=1.0, max_iter=1000, random_state=42)
 
 def loo_acc(labels):
     correct = 0
@@ -252,14 +252,64 @@ Output:
 
 ```text
 Real labels: 100.0%
-Share of all 35 labelings reaching >= real accuracy: 2.9%
+Share of all 35 labelings reaching >= real accuracy: 5.7%
 ```
 
-The real labeling is one of the 35, so the smallest possible share is 1/35, about 2.9%. The result is exactly that minimum: only the real labeling reaches 100%, and none of the 34 scrambled labelings do. This supports the result, and it is the more relevant check for the chance-separation worry in section 6, because it runs the whole pipeline on the real, correlated gene data instead of assuming genes behave independently.
+The real labeling is one of the 35, so the smallest possible share is 1/35, about 2.9%. With `random_state=42` the share is 2/35 (5.7%): the real labeling and one scrambled labeling reach 100%. An earlier run without a seed gave 1/35, so this number depends on the solver's random seed. The most likely reason is that with 6 training samples and 29,556 features the L1 fit is underdetermined, and the solver's random coordinate order can flip a borderline prediction, enough to move one labeling across the 100% line.
 
-Two limits remain. An exact p-value of 1/35 ≈ 0.029 is the smallest this sample size can give, so it passes the usual 0.05 threshold but not by a wide margin. And the test shows that the labels are associated with expression in these 7 samples. It does not rule out a batch or other confound shared with the condition, and it says nothing about new samples.
+The honest reading is that p lies between 0.029 and 0.057, right at the usual 0.05 threshold, so this is weaker support than a clean 1/35. The test is still more relevant to the chance-separation worry in section 6 than the single-gene calculation, because it runs the whole pipeline on the real, correlated gene data. But it neither clearly confirms nor rules out a chance result. It also does not rule out a batch or other confound shared with the condition, and it says nothing about new samples.
 
-### 7.3 Biological sanity check: the top gene and SMOC2
+### 7.3 Stability selection across sample subsets
+
+The fold check in 7.1 only shows 7 variations of the data. A broader check refits the model on every possible 5-sample subset. There are 21 of them, and each always contains both classes. It does this at three values of `C` and counts how often each gene gets a non-zero weight. This is descriptive only: the subsets overlap heavily, and the formal error guarantees of stability selection need far more samples than 7.
+
+```python
+from itertools import combinations
+from collections import Counter
+
+counts, n_fits = Counter(), 0
+for C in [0.5, 1.0, 2.0]:
+    for keep in combinations(range(len(y)), 5):
+        keep = list(keep)
+        sc = StandardScaler().fit(df_ml.iloc[keep])
+        m = LogisticRegression(l1_ratio=1, solver='liblinear', C=C, max_iter=1000, random_state=42)
+        m.fit(sc.transform(df_ml.iloc[keep]), y[keep])
+        counts.update(np.where(m.coef_[0] != 0)[0]); n_fits += 1
+
+freq = pd.Series({df_ml.columns[i]: c / n_fits for i, c in counts.items()}).sort_values(ascending=False)
+print(f"Total fits: {n_fits}")
+print(freq.head(15))
+print("SMOC2 selection frequency:", freq.get('ENSMUSG00000023886', 0))
+```
+
+Output:
+
+```text
+Total fits: 63
+ENSMUSG00000030255    0.873016
+ENSMUSG00000027510    0.365079
+ENSMUSG00000028885    0.349206
+ENSMUSG00000026639    0.222222
+ENSMUSG00000044456    0.206349
+ENSMUSG00000047098    0.190476
+ENSMUSG00000017210    0.174603
+ENSMUSG00000010936    0.174603
+ENSMUSG00000015652    0.174603
+ENSMUSG00000033885    0.174603
+ENSMUSG00000020629    0.158730
+ENSMUSG00000090213    0.158730
+ENSMUSG00000022346    0.158730
+ENSMUSG00000015647    0.158730
+ENSMUSG00000024816    0.158730
+dtype: float64
+SMOC2 selection frequency: 0.015873015873015872
+```
+
+`ENSMUSG00000030255` (Sspn) was selected in 55 of 63 fits (87%). It is also the gene selected in all 7 LOO folds, so two different resampling schemes agree on it. The next genes were selected in only 37% and 35% of fits, and every other gene was at or below 22%. The rest of the 91-gene signature is therefore unstable and should not be interpreted. Sspn was not selected in every fit (8 of 63 missed it), so "most subsets" is accurate and "every subset" is not. The misses were not broken down by `C`.
+
+SMOC2 was selected in 1 of 63 fits (1.6%). That does not mean SMOC2 is unimportant. It is highly correlated with Sspn (r = 0.975, see 7.4), and L1 tends to keep one gene from a correlated group and zero out the rest.
+
+### 7.4 Biological sanity check: the top gene and SMOC2
 
 SMOC2 is reported to be among the most upregulated genes in mouse kidney fibrosis, so it works as a positive control for the data and labels. This cell checks it directly and compares it with the model's top gene.
 
@@ -319,7 +369,8 @@ What the evidence supports:
 
 - The first model failed for a mathematical reason, not a biological one: with 7 samples and standardized features, `C = 0.1` is too strict for any gene to enter the model, and the 42.9% was the share of Normal samples.
 - At `C = 1.0` the model finds one gene, `ENSMUSG00000030255`, that is selected in every fold and separates the two groups with no overlap.
-- The exact permutation test over all 35 labelings gives p ≈ 0.029 (1/35): only the real labeling reaches 100% LOOCV accuracy.
+- The exact permutation test over all 35 labelings is borderline: with a fixed seed, 2 of 35 labelings (p ≈ 0.057) reach 100% LOOCV accuracy, and an earlier unseeded run gave 1 of 35 (p ≈ 0.029). The result depends on the solver seed and sits at the 0.05 line.
+- In stability selection (63 fits on 5-sample subsets), `ENSMUSG00000030255` is selected in 87% of fits, no other gene exceeds 37%, and SMOC2 is selected in 1.6%.
 - SMOC2, a gene reported to be strongly upregulated in mouse kidney fibrosis, is about 6.4-fold higher in the fibrosis samples with no overlap between groups, which supports the labels and preprocessing.
 - The remaining 90 genes in the 91-gene signature are unstable and should not be interpreted.
 
@@ -331,7 +382,7 @@ What the evidence does not support:
 
 ## 9. Next steps
 
-1. **Differential expression on raw counts** with DESeq2, edgeR, or `pydeseq2`, which model count data and give adjusted p-values. Check where `ENSMUSG00000030255` ranks and whether its adjusted p-value and log2 fold change hold up.
+1. **Differential expression on raw counts** with DESeq2, edgeR, or `pydeseq2`, which model count data and give adjusted p-values. Check where `ENSMUSG00000030255` ranks and whether its adjusted p-value and log2 fold change hold up. If they hold up, validate by qPCR on independent animals, starting with Sspn and SMOC2.
 2. **Follow up on Sspn.** The top gene is identified (sarcospan), so the next step is to check what is known about it in kidney tissue and fibrosis, and whether it also ranks highly in a differential expression analysis. Treat it as a lead until then.
-3. **Reduce the feature space** before modeling, either by keeping the most variable genes or genes that pass a differential expression filter, or try an elastic net penalty (`penalty='elasticnet'`, `solver='saga'`), which copes better with correlated genes than pure L1.
+3. **Reduce the feature space** before modeling, either by keeping the most variable genes or genes that pass a differential expression filter, or try an elastic net penalty (`l1_ratio=0.5`, `solver='saga'`), which copes better with correlated genes than pure L1.
 4. **Find an external dataset** with a comparable fibrosis versus normal design to use as a held-out test. This is the only way to estimate how the model would perform on new samples.
