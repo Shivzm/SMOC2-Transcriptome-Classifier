@@ -68,7 +68,7 @@ With 7 samples a conventional train/test split is not workable, so Leave-One-Out
 
 ## Model Training and Results
 
-Two values of `C` were tried. The first (`C=0.1`) selected no genes at all. The second (`C=1.0`) is the model reported here. The full story, including the mathematics behind the failure of the first attempt, is in [docs/model_tuning_and_validation.md](docs/model_tuning_and_validation.md).
+Two values of `C` were tried. The first (`C=0.1`) selected no genes at all. The second (`C=1.0`) is the model reported here. The full story, including the mathematics behind the failure of the first attempt, is in [Docs/model_tuning_and_validation.md](Docs/model_tuning_and_validation.md).
 
 | C   | Genes selected | LOOCV accuracy | Comment                                          |
 |-----|----------------|----------------|--------------------------------------------------|
@@ -167,7 +167,7 @@ A cross-validation accuracy of 100% looks impressive, but with 7 samples it is m
 
 ## Validation Checks
 
-Because the headline number is fragile, follow-up checks were run on the model. The code for each is in [docs/model_tuning_and_validation.md](Docs/model_tuning_and_validation.md).
+Because the headline number is fragile, follow-up checks were run on the model. The code for each is in [Docs/model_tuning_and_validation.md](Docs/model_tuning_and_validation.md).
 
 **Gene stability across folds.** Only one gene was selected in all 7 LOOCV folds. The 91-gene list from the full-data fit is therefore not a stable signature. Most of it changes from fold to fold.
 
