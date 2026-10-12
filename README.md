@@ -215,9 +215,9 @@ The gap of about 1.7 log2 units corresponds to roughly a 3-fold difference, and 
 SMOC2-Transcriptome-Classifier/
 ├── Data/
 │   └── fibrosis_smoc2_rawcounts.csv
-├── docs/
+├── Docs/
 │   └── model_tuning_and_validation.md
-├── images/
+├── Images/
 ├── notebooks/
 │   └── 01_eda_and_fibrosis_classification.ipynb
 ├── .gitignore
